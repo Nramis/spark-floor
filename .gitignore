@@ -1,0 +1,16 @@
+.gradle/
+.idea/
+build/
+local.properties
+assets/floor.onnx
+__pycache__/
+*.apk
+*.aab
+*.keystore
+*.jks
+*.p12
+*.key
+.env
+.env.*
+!.env.example
+*.log

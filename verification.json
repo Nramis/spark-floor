@@ -1,0 +1,21 @@
+{
+  "model_sha256": "3e5c18a4be395f16646438d54c42377ddc202edfa33d5eced0c9506de75c44c2",
+  "desktop_java_model_inference": "passed, ONNX Runtime 1.16.3",
+  "java_geometry_tests": "5 passed",
+  "java_python_floor_mask_iou": 0.9994010182689428,
+  "java_python_disagreeing_pixels": 2,
+  "physical_android_tested": false,
+  "distance_measurement_implemented": true,
+  "version": "0.7",
+  "distance_status": "experimental; numerical tests passed, phone measurements not validated",
+  "distance_geometry_tests": "passed: known depth, off-axis, roll, calibration, invalid geometry",
+  "path_geometry_tests": "passed: projection roundtrip with roll and focal scale; straight, diagonal, left, right, S; metric arc length; fork, gap, clipped edges, short, empty, remote, missing pose, range refusals",
+  "path_status": "experimental visible floor-mask centreline; flat horizontal floor assumed; not a navigation route; physical accuracy unknown",
+  "android_compile_v07": "passed: installed JDK and Android SDK 35",
+  "apk_build_v07": "passed: tools/build_local.py; ARM32 and ARM64; signature v2/v3 and zip alignment verified",
+  "gradle_build_v07": "failed: TLS handshake fetching Google Maven builder-8.7.3.jar",
+  "apk_sha256_v07": "179c89cfeebf31ce633b205f9f11f4b1769950bed0f321d56ca71846eca7cf9c",
+  "device_ui_voice_tested_v07": false,
+  "neural_network_changed_v07": false,
+  "prior_desktop_model_checks_version": "0.6"
+}
