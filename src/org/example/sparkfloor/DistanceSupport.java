@@ -114,6 +114,26 @@ public final class DistanceSupport implements SensorEventListener {
         return new Shot(prefs.getFloat("height", 0), fovX, fovY, vector);
     }
 
+    private void announce(String text) {
+        status.setText(text);
+        speak.accept(text);
+    }
+
+    public String readiness(double fovX, double fovY) {
+        Shot shot = capture(fovX, fovY);
+        if (shot.h <= 0) return "Задайте высоту объектива над полом. Команда: высота.";
+        if (shot.up == null)
+            return "Держите телефон неподвижно несколько секунд: наклон ещё не готов.";
+        if (!Double.isFinite(fovX)
+                || !Double.isFinite(fovY)
+                || fovX < 15
+                || fovX > 150
+                || fovY < 15
+                || fovY > 150)
+            return "Камера не сообщила пригодные углы обзора. Можно выделить пол, но метры недоступны.";
+        return "Готов к съёмке. Скажите снимок после нажатия кнопки голосовой команды. Оценка требует ровного пола.";
+    }
+
     public Button settingsButton() {
         settings = new Button(activity);
         refreshSettings();
@@ -146,10 +166,10 @@ public final class DistanceSupport implements SensorEventListener {
                                                     .apply();
                                             frame = null;
                                             refreshSettings();
-                                            status.setText(
+                                            announce(
                                                     "Высота сохранена. Держите телефон неподвижно несколько секунд и сделайте новый снимок.");
                                         } catch (Exception e) {
-                                            status.setText("Введите высоту от 40 до 250 см.");
+                                            announce("Введите высоту от 40 до 250 см.");
                                         }
                                     })
                             .setNeutralButton("Сброс калибровки", (d, w) -> resetCalibration())
@@ -171,7 +191,7 @@ public final class DistanceSupport implements SensorEventListener {
         b.setOnClickListener(
                 v -> {
                     if (frame == null) {
-                        status.setText("Сначала выполните анализ снимка.");
+                        announce("Сначала выполните анализ снимка.");
                         return;
                     }
                     ImageView full = new ImageView(activity);
@@ -213,8 +233,7 @@ public final class DistanceSupport implements SensorEventListener {
             target.setImageBitmap(renderPath(f.bitmap, f.path));
             text += "\n" + f.path.summary();
         }
-        status.setText(text);
-        speak.accept(text);
+        announce(text);
     }
 
     public void attach(
@@ -309,21 +328,20 @@ public final class DistanceSupport implements SensorEventListener {
     void select(ImageView image, float tx, float ty, boolean calibration) {
         Frame f = frame;
         if (f == null) {
-            status.setText("Нужен новый обработанный снимок.");
+            announce("Нужен новый обработанный снимок.");
             return;
         }
         Shot shot = f.shot;
         if (shot == null) {
-            status.setText(
-                    "На встроенном фото метры отключены: параметры и поза его камеры неизвестны.");
+            announce("На встроенном фото метры отключены: параметры и поза его камеры неизвестны.");
             return;
         }
         if (shot.h <= 0) {
-            status.setText("Сначала задайте высоту камеры и сделайте новый снимок.");
+            announce("Сначала задайте высоту камеры и сделайте новый снимок.");
             return;
         }
         if (shot.up == null) {
-            status.setText(
+            announce(
                     "При съёмке не было свежей устойчивой оценки наклона. Держите телефон неподвижно несколько секунд и переснимите.");
             return;
         }
@@ -333,7 +351,7 @@ public final class DistanceSupport implements SensorEventListener {
                 || shot.fxAngle > 150
                 || shot.fyAngle < 15
                 || shot.fyAngle > 150) {
-            status.setText("Камера не сообщила пригодные углы обзора. Метры недоступны.");
+            announce("Камера не сообщила пригодные углы обзора. Метры недоступны.");
             return;
         }
         int width = f.bitmap.getWidth(), height = f.bitmap.getHeight();
@@ -364,7 +382,7 @@ public final class DistanceSupport implements SensorEventListener {
         int mx = Math.min(f.mw - 1, (int) (u * f.mw / width)),
                 my = Math.min(f.mh - 1, (int) (v * f.mh / height));
         if (!f.floor[my * f.mw + mx]) {
-            status.setText("Эта точка не распознана как пол. Расстояние не вычисляется.");
+            announce("Эта точка не распознана как пол. Расстояние не вычисляется.");
             return;
         }
         double fx = width / (2 * Math.tan(Math.toRadians(shot.fxAngle / 2))),
@@ -398,7 +416,7 @@ public final class DistanceSupport implements SensorEventListener {
                                             .apply();
                                     showMeasurement(image, f, u, v, fx, fy, scale, true);
                                 } catch (Exception e) {
-                                    status.setText(
+                                    announce(
                                             "Калибровка не определилась однозначно. Выберите другую точку вдали от середины кадра и проверьте высоту/рулетку.");
                                 }
                             })
@@ -428,7 +446,7 @@ public final class DistanceSupport implements SensorEventListener {
                         f.shot.up,
                         scale);
         if (!Double.isFinite(distance)) {
-            status.setText(
+            announce(
                     "Луч слишком близок к горизонту, не пересекает пол впереди или оценка дальше 10 м. Метры не выдаются.");
             return;
         }
@@ -473,7 +491,6 @@ public final class DistanceSupport implements SensorEventListener {
                                 : "Углы обзора взяты из камеры и пока не проверены.")
                         + "\n"
                         + f.path.summary();
-        status.setText(text);
-        speak.accept(text);
+        announce(text);
     }
 }

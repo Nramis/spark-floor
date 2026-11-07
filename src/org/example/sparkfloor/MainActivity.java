@@ -7,7 +7,6 @@ import android.content.pm.PackageManager;
 import android.graphics.*;
 import android.hardware.Camera;
 import android.media.ExifInterface;
-import android.speech.tts.TextToSpeech;
 import android.view.*;
 import android.widget.*;
 import ai.onnxruntime.*;
@@ -25,8 +24,8 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
     TextView state;
     ImageView map;
     Button capture;
-    TextToSpeech tts;
-    boolean voice = false;
+    VoiceAssistant assistant;
+    boolean welcomed;
     volatile boolean alive = true, busy = false;
     volatile OrtSession model;
     OrtEnvironment env;
@@ -43,7 +42,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
         root.setOrientation(1);
         root.setPadding(16, 28, 16, 16);
         TextView title = new TextView(this);
-        title.setText("Ориентир Пол · версия 0.7");
+        title.setText("Ориентир Пол · версия 0.8");
         title.setTextSize(23);
         root.addView(title);
         TextView note = new TextView(this);
@@ -59,7 +58,10 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
         map.setScaleType(ImageView.ScaleType.FIT_CENTER);
         map.setContentDescription("Маска пола и трапеция на последнем снимке");
         pictures.addView(map, new LinearLayout.LayoutParams(0, -1, 1));
-        root.addView(pictures, new LinearLayout.LayoutParams(-1, 0, 1));
+        root.addView(
+                pictures,
+                new LinearLayout.LayoutParams(
+                        -1, Math.round(220 * getResources().getDisplayMetrics().density)));
         map.setContentDescription(
                 "Маска пола, трапеция и предполагаемая ось видимой дорожки на последнем снимке");
         state = new TextView(this);
@@ -68,6 +70,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
         state.setMovementMethod(new android.text.method.ScrollingMovementMethod());
         state.setText("Загрузка встроенной модели…");
         root.addView(state);
+        assistant = new VoiceAssistant(this, this::handleVoiceCommand);
         capture = new Button(this);
         capture.setText("Сделать снимок и проанализировать");
         capture.setEnabled(false);
@@ -82,6 +85,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
                         if (distance != null) distance.clear();
                         capture.setEnabled(false);
                         state.setText("Обработка примера…");
+                        say("Обрабатываю встроенный пример. Метры на нём недоступны.");
                         worker.execute(
                                 () -> {
                                     try {
@@ -99,6 +103,9 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
                                                 () -> {
                                                     state.setText(
                                                             "Ошибка примера: " + e.getMessage());
+                                                    say("Не удалось обработать встроенный пример.");
+                                                    spoken =
+                                                            "Не удалось обработать встроенный пример.";
                                                     capture.setEnabled(true);
                                                 });
                                     }
@@ -119,21 +126,28 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
         root.addView(distance.fullscreenButton());
         Button repeat = new Button(this);
         repeat.setText("Повторить результат голосом");
-        repeat.setOnClickListener(v -> say(spoken));
-        root.addView(repeat);
+        repeat.setOnClickListener(v -> repeatResult());
+        LinearLayout voiceControls = new LinearLayout(this);
+        voiceControls.addView(assistant.button(), new LinearLayout.LayoutParams(0, -2, 1));
+        voiceControls.addView(repeat, new LinearLayout.LayoutParams(0, -2, 1));
+        repeat.setText("Повторить результат");
+        repeat.setOnLongClickListener(
+                v -> {
+                    assistant.stop();
+                    return true;
+                });
+        repeat.setContentDescription("Повторить результат. Удержание останавливает речь.");
+        root.addView(voiceControls);
+        root.addView(assistant.statusView());
         TextView footer = new TextView(this);
         footer.setText(
                 "Эксперимент. Маска и трапеция не подтверждают безопасность прохода. Испытывайте с сопровождающим.");
         footer.setTextSize(12);
         root.addView(footer);
-        setContentView(root);
-        tts =
-                new TextToSpeech(
-                        this,
-                        s -> {
-                            if (s == TextToSpeech.SUCCESS)
-                                voice = tts.setLanguage(new Locale("ru", "RU")) >= 0;
-                        });
+        ScrollView scroll = new ScrollView(this);
+        scroll.setFillViewport(true);
+        scroll.addView(root, new ScrollView.LayoutParams(-1, -2));
+        setContentView(scroll);
         worker.execute(
                 () -> {
                     try {
@@ -157,15 +171,19 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
                                     state.setText(
                                             "Модель пола готова. Сделайте снимок или запустите встроенный пример. Обработка на Spark 8 может быть медленной.");
                                     capture.setEnabled(true);
+                                    say(readiness());
                                 });
                     } catch (Throwable e) {
                         ui(
-                                () ->
-                                        state.setText(
-                                                "Ошибка загрузки модели: "
-                                                        + e.getClass().getSimpleName()
-                                                        + " "
-                                                        + e.getMessage()));
+                                () -> {
+                                    state.setText(
+                                            "Ошибка загрузки модели: "
+                                                    + e.getClass().getSimpleName()
+                                                    + " "
+                                                    + e.getMessage());
+                                    say(
+                                            "Не удалось загрузить модель пола. Анализ снимка недоступен.");
+                                });
                     }
                 });
     }
@@ -179,7 +197,50 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
     }
 
     void say(String s) {
-        if (voice) tts.speak(s, TextToSpeech.QUEUE_FLUSH, null, "result");
+        if (assistant != null) assistant.speak(s);
+    }
+
+    String readiness() {
+        if (busy) return "Выполняется анализ снимка. Дождитесь результата.";
+        if (model == null) return "Модель пола ещё не готова. Проверьте сообщение на экране.";
+        if (camera == null)
+            return "Камера недоступна. Проверьте разрешение камеры и вернитесь в приложение.";
+        return distance.readiness(fovX, fovY);
+    }
+
+    void repeatResult() {
+        if (busy) assistant.tell("Новый снимок ещё обрабатывается. Дождитесь результата.");
+        else say(spoken);
+    }
+
+    void handleVoiceCommand(VoiceCommands.Command command) {
+        switch (command) {
+            case CAPTURE:
+                take();
+                break;
+            case REPEAT:
+                repeatResult();
+                break;
+            case HELP:
+                assistant.showHelp();
+                break;
+            case STATUS:
+                assistant.tell(readiness());
+                break;
+            case HEIGHT:
+                if (busy)
+                    assistant.tell("Дождитесь окончания анализа, затем задайте высоту камеры.");
+                else {
+                    distance.settings.performClick();
+                    say("Введите высоту объектива над полом в сантиметрах и нажмите сохранить.");
+                }
+                break;
+            case STOP:
+                assistant.stop();
+                break;
+            default:
+                assistant.tell(VoiceCommands.help());
+        }
     }
 
     void startCamera() {
@@ -223,6 +284,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
         } catch (Exception e) {
             releaseCamera();
             state.setText("Камера недоступна: " + e.getMessage());
+            say("Камера недоступна. Проверьте разрешение камеры.");
         }
     }
 
@@ -238,15 +300,22 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
     }
 
     void take() {
-        if (busy || model == null) return;
+        if (busy || model == null) {
+            assistant.tell(readiness());
+            return;
+        }
         if (camera == null) {
             startCamera();
-            return;
+            if (camera == null) {
+                assistant.tell(readiness());
+                return;
+            }
         }
         busy = true;
         if (distance != null) distance.clear();
         capture.setEnabled(false);
         state.setText("Снимок получен. Выполняется анализ на телефоне…");
+        say("Снимаю. Дождитесь результата анализа.");
         final DistanceSupport.Shot[] shot = {distance.capture(fovX, fovY)};
         try {
             camera.takePicture(
@@ -264,6 +333,8 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
             busy = false;
             capture.setEnabled(true);
             state.setText("Не удалось снять кадр: " + e.getMessage());
+            spoken = "Снимок не получен. Попробуйте ещё раз.";
+            say("Не удалось снять кадр. Попробуйте ещё раз.");
         }
     }
 
@@ -387,6 +458,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
                         map.setImageDrawable(null);
                         spoken = error;
                         state.setText(error);
+                        say("Не удалось обработать снимок. Попробуйте снять ещё раз.");
                     });
         } finally {
             if (scaled != null && scaled != original) scaled.recycle();
@@ -412,14 +484,20 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
     @Override
     public void onResume() {
         super.onResume();
+        if (assistant != null) assistant.resume();
         if (distance != null) distance.resume();
         if (holder != null && holder.getSurface().isValid()) startCamera();
+        if (!welcomed && assistant != null) {
+            welcomed = true;
+            say(
+                    "Голосовой помощник включён. Для команды нажмите «Голосовая команда». Удерживайте эту кнопку для помощи.");
+        }
     }
 
     @Override
     public void onPause() {
         if (distance != null) distance.pause();
-        if (tts != null) tts.stop();
+        if (assistant != null) assistant.pause();
         releaseCamera();
         super.onPause();
     }
@@ -427,19 +505,23 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
     @Override
     public void onRequestPermissionsResult(int r, String[] p, int[] grants) {
         super.onRequestPermissionsResult(r, p, grants);
-        if (r == 3 && grants.length > 0 && grants[0] == PackageManager.PERMISSION_GRANTED)
-            startCamera();
-        else state.setText("Для работы разрешите камеру в настройках приложения.");
+        if (r == VoiceAssistant.MICROPHONE_PERMISSION) {
+            assistant.onPermissionResult(
+                    grants.length > 0 && grants[0] == PackageManager.PERMISSION_GRANTED);
+        } else if (r == 3) {
+            if (grants.length > 0 && grants[0] == PackageManager.PERMISSION_GRANTED) startCamera();
+            else {
+                state.setText("Для работы разрешите камеру в настройках приложения.");
+                say("Для съёмки разрешите камеру в настройках приложения.");
+            }
+        }
     }
 
     @Override
     public void onDestroy() {
         alive = false;
         releaseCamera();
-        if (tts != null) {
-            tts.stop();
-            tts.shutdown();
-        }
+        if (assistant != null) assistant.destroy();
         worker.execute(
                 () -> {
                     if (model != null)

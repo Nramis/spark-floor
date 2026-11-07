@@ -155,7 +155,7 @@ if not key.exists():
         "-dname",
         "CN=Android Debug,O=Android,C=US",
     )
-output = ROOT / "build/outputs/apk/local/spark-floor-0.7-debug.apk"
+output = ROOT / "build/outputs/apk/local/spark-floor-0.8-debug.apk"
 output.parent.mkdir(parents=True, exist_ok=True)
 signer = tools / "lib/apksigner.jar"
 run(
