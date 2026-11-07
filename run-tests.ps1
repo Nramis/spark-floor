@@ -7,10 +7,13 @@ $sources = @(
     'src/org/example/sparkfloor/FloorPath.java',
     'src/org/example/sparkfloor/Trapezoid.java',
     'src/org/example/sparkfloor/VoiceCommands.java',
+    'src/org/example/sparkfloor/Segmentation.java',
+    'src/org/example/sparkfloor/SceneDescription.java',
     'DistanceTest.java',
     'TrapezoidTest.java',
     'FloorPathTest.java',
-    'VoiceCommandsTest.java'
+    'VoiceCommandsTest.java',
+    'SceneDescriptionTest.java'
 ) | ForEach-Object {
     Join-Path $PSScriptRoot $_
 }
@@ -20,7 +23,7 @@ if ($LASTEXITCODE -ne 0) {
     throw 'Geometry compilation failed'
 }
 
-foreach ($test in @('DistanceTest', 'TrapezoidTest', 'FloorPathTest', 'VoiceCommandsTest')) {
+foreach ($test in @('DistanceTest', 'TrapezoidTest', 'FloorPathTest', 'VoiceCommandsTest', 'SceneDescriptionTest')) {
     & java -cp $classes $test
     if ($LASTEXITCODE -ne 0) {
         throw "$test failed"

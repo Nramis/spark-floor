@@ -32,7 +32,7 @@ public final class VoiceAssistant {
     private final TextView status;
     private TextToSpeech tts;
     private SpeechRecognizer recognizer;
-    private boolean active, destroyed, ready, listening, permissionPending;
+    private boolean active, destroyed, ready, listening, permissionPending, speechInitialized;
     private boolean systemConsent;
     private int generation;
     private String pendingSpeech;
@@ -75,6 +75,10 @@ public final class VoiceAssistant {
         return status;
     }
 
+    public String speechProblem() {
+        return speechInitialized && !ready ? voiceProblem : null;
+    }
+
     public void showHelp() {
         if (!active || destroyed) return;
         finishListening();
@@ -89,6 +93,7 @@ public final class VoiceAssistant {
 
     private void initializeSpeech(int result) {
         if (destroyed) return;
+        speechInitialized = true;
         try {
             if (result == TextToSpeech.SUCCESS) {
                 Set<Voice> voices = tts.getVoices();
@@ -342,6 +347,7 @@ public final class VoiceAssistant {
 
     public void resume() {
         active = true;
+        if (speechInitialized && !ready) initializeSpeech(TextToSpeech.SUCCESS);
     }
 
     public void pause() {

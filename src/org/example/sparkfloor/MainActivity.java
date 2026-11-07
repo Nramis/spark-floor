@@ -42,13 +42,20 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
         root.setOrientation(1);
         root.setPadding(16, 28, 16, 16);
         TextView title = new TextView(this);
-        title.setText("Ориентир Пол · версия 0.8");
+        title.setText("Ориентир Пол · версия 0.9");
         title.setTextSize(23);
         root.addView(title);
         TextView note = new TextView(this);
         note.setText(
-                "Зелёный — предполагаемый пол, голубой — трапеция, розовый — ось видимой дорожки. Для длины и изгибов задайте высоту камеры и снимите неподвижным телефоном.");
+                "Зелёный — предполагаемый пол, розовый — ось дорожки, если её удалось построить. Комментарий описывает пол, возможные препятствия и видимую длину. Для метров задайте высоту камеры.");
         root.addView(note);
+        CheckBox trapezoidOverlay = new CheckBox(this);
+        trapezoidOverlay.setText("Дополнительно рисовать трапецию при анализе");
+        trapezoidOverlay.setChecked(getPreferences(0).getBoolean("showTrapezoid", false));
+        trapezoidOverlay.setOnCheckedChangeListener(
+                (button, checked) ->
+                        getPreferences(0).edit().putBoolean("showTrapezoid", checked).apply());
+        root.addView(trapezoidOverlay);
         LinearLayout pictures = new LinearLayout(this);
         preview = new SurfaceView(this);
         holder = preview.getHolder();
@@ -63,7 +70,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
                 new LinearLayout.LayoutParams(
                         -1, Math.round(220 * getResources().getDisplayMetrics().density)));
         map.setContentDescription(
-                "Маска пола, трапеция и предполагаемая ось видимой дорожки на последнем снимке");
+                "Маска пола и ось дорожки, если она определена. Описание сцены находится под снимком.");
         state = new TextView(this);
         state.setTextSize(17);
         state.setMaxLines(6);
@@ -383,6 +390,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
             int mw = Math.max(8, Math.round(width * scale)),
                     mh = Math.max(20, Math.round(height * scale));
             boolean[] floor = new boolean[mw * mh];
+            int[] labels;
             try (OnnxTensor tensor =
                             OnnxTensor.createTensor(env, input, new long[] {1, 3, 512, 512});
                     OrtSession.Result results =
@@ -390,10 +398,14 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
                                     Collections.singletonMap(
                                             model.getInputNames().iterator().next(), tensor))) {
                 float[][][] logits = ((float[][][][]) results.get(0).getValue())[0];
-                floor = Segmentation.floor(logits, mw, mh);
+                labels = Segmentation.labels(logits, mw, mh);
+                floor = Segmentation.floorMask(labels);
             }
 
-            Trapezoid trap = Trapezoid.fit(floor, mw, mh);
+            Trapezoid trap =
+                    getPreferences(0).getBoolean("showTrapezoid", false)
+                            ? Trapezoid.fit(floor, mw, mh)
+                            : null;
             int[] maskColors = new int[floor.length];
             int floorCount = 0;
             for (int i = 0; i < floor.length; i++)
@@ -408,7 +420,6 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
             paint.setFilterBitmap(false);
             canvas.drawBitmap(smallMask, null, new Rect(0, 0, width, height), paint);
             smallMask.recycle();
-            String message;
             if (trap != null) {
                 float xs = (float) width / mw, ys = (float) height / mh;
                 Path path = new Path();
@@ -422,31 +433,31 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
                 paint.setStyle(Paint.Style.STROKE);
                 paint.setStrokeWidth(Math.max(3, width / 150f));
                 canvas.drawPath(path, paint);
-                message =
-                        "Пол выделен. Внутри маски найдена трапеция. Безопасность прохода не определена.";
-            } else
-                message =
-                        "Подходящая трапеция не найдена. Зелёным показан предполагаемый пол, если модель его обнаружила.";
+            }
             FloorPath.Result pathResult = distance.analyzePath(floor, mw, mh, shot, width, height);
+            SceneDescription.Result description =
+                    distance.describeScene(labels, mw, mh, shot, width, height, pathResult);
             Bitmap pathImage = DistanceSupport.renderPath(rendered, pathResult);
             long elapsed = SystemClock.elapsedRealtime() - start;
             String text =
-                    pathResult.summary()
-                            + "\n"
-                            + message
+                    description.summary
                             + "\nАнализ ПОСЛЕДНЕГО снимка. Обработка: "
                             + String.format(Locale.getDefault(), "%.1f", elapsed / 1000f)
                             + " с. Доля маски пола: "
                             + Math.round(100f * floorCount / floor.length)
                             + "% кадра (не уверенность).";
-            final String announcement = pathResult.summary();
+            final String announcement = description.summary;
             final boolean[] measuredMask = floor;
             ui(
                     () -> {
                         map.setImageBitmap(pathImage);
-                        distance.attach(rendered, measuredMask, mw, mh, shot, pathResult);
+                        distance.attach(rendered, measuredMask, labels, mw, mh, shot, pathResult);
                         spoken = text;
-                        state.setText(text);
+                        String speechProblem = assistant.speechProblem();
+                        state.setText(
+                                speechProblem == null
+                                        ? text
+                                        : text + "\nОзвучка: " + speechProblem);
                         say(announcement);
                     });
         } catch (Throwable e) {

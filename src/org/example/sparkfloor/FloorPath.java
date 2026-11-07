@@ -61,6 +61,10 @@ public final class FloorPath {
         }
 
         public String summary() {
+            return summary(true);
+        }
+
+        public String summary(boolean includeDisclaimer) {
             if (end == End.NO_GEOMETRY)
                 return "Длина и изгибы дорожки недоступны: нужны высота, устойчивый наклон и углы обзора при съёмке.";
             if (points.isEmpty())
@@ -92,9 +96,10 @@ public final class FloorPath {
                 text.append("Дальше резкое изменение или разрыв; линия остановлена. ");
             else if (end == End.LIMIT) text.append("Достигнут предел области расчёта. ");
             else text.append("Линия заканчивается у границы видимого или распознанного участка. ");
-            return text.append(
-                            "Это оценка по маске пола, не полная длина дорожки и не подтверждение проходимости.")
-                    .toString();
+            if (includeDisclaimer)
+                text.append(
+                        "Это оценка по маске пола, не полная длина дорожки и не подтверждение проходимости.");
+            return text.toString();
         }
     }
 

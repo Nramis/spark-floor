@@ -12,10 +12,13 @@ sources = [
     "src/org/example/sparkfloor/FloorPath.java",
     "src/org/example/sparkfloor/Trapezoid.java",
     "src/org/example/sparkfloor/VoiceCommands.java",
+    "src/org/example/sparkfloor/Segmentation.java",
+    "src/org/example/sparkfloor/SceneDescription.java",
     "DistanceTest.java",
     "TrapezoidTest.java",
     "FloorPathTest.java",
     "VoiceCommandsTest.java",
+    "SceneDescriptionTest.java",
 ]
 subprocess.run(
     ["javac", "--release", "8", "-encoding", "UTF-8", "-d", str(CLASSES)]
@@ -23,5 +26,11 @@ subprocess.run(
     cwd=ROOT,
     check=True,
 )
-for test in ("DistanceTest", "TrapezoidTest", "FloorPathTest", "VoiceCommandsTest"):
+for test in (
+    "DistanceTest",
+    "TrapezoidTest",
+    "FloorPathTest",
+    "VoiceCommandsTest",
+    "SceneDescriptionTest",
+):
     subprocess.run(["java", "-cp", str(CLASSES), test], cwd=ROOT, check=True)

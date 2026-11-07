@@ -27,13 +27,15 @@ public final class DistanceSupport implements SensorEventListener {
     static final class Frame {
         final Bitmap bitmap;
         final boolean[] floor;
+        final int[] labels;
         final int mw, mh;
         final Shot shot;
         FloorPath.Result path;
 
-        Frame(Bitmap b, boolean[] f, int w, int h, Shot s, FloorPath.Result p) {
+        Frame(Bitmap b, boolean[] f, int[] labels, int w, int h, Shot s, FloorPath.Result p) {
             bitmap = b;
             floor = f;
+            this.labels = labels;
             mw = w;
             mh = h;
             shot = s;
@@ -231,18 +233,28 @@ public final class DistanceSupport implements SensorEventListener {
                     analyzePath(
                             f.floor, f.mw, f.mh, f.shot, f.bitmap.getWidth(), f.bitmap.getHeight());
             target.setImageBitmap(renderPath(f.bitmap, f.path));
-            text += "\n" + f.path.summary();
+            text += "\n" + frameDescription(f);
         }
         announce(text);
     }
 
     public void attach(
-            Bitmap image, boolean[] mask, int w, int h, Shot shot, FloorPath.Result path) {
-        frame = new Frame(image, mask, w, h, shot, path);
+            Bitmap image,
+            boolean[] mask,
+            int[] labels,
+            int w,
+            int h,
+            Shot shot,
+            FloorPath.Result path) {
+        frame = new Frame(image, mask, labels, w, h, shot, path);
     }
 
     public FloorPath.Result analyzePath(
             boolean[] mask, int mw, int mh, Shot shot, int width, int height) {
+        return FloorPath.analyze(mask, mw, mh, projection(shot, width, height));
+    }
+
+    private GroundProjection projection(Shot shot, int width, int height) {
         GroundProjection projection = null;
         if (shot != null
                 && shot.up != null
@@ -263,7 +275,38 @@ public final class DistanceSupport implements SensorEventListener {
             } catch (IllegalArgumentException ignored) {
             }
         }
-        return FloorPath.analyze(mask, mw, mh, projection);
+        return projection;
+    }
+
+    public SceneDescription.Result describeScene(
+            int[] labels, int mw, int mh, Shot shot, int width, int height, FloorPath.Result path) {
+        String reason;
+        if (shot == null)
+            reason =
+                    "Длину в метрах для встроенного фото определить нельзя: неизвестны высота и положение его камеры.";
+        else if (shot.h < .4 || shot.h > 2.5)
+            reason =
+                    "Для длины в метрах задайте высоту объектива над полом и сделайте новый снимок.";
+        else if (shot.up == null)
+            reason =
+                    "Длина в метрах недоступна: при съёмке наклон не был устойчивым. Подержите телефон неподвижно и переснимите.";
+        else
+            reason =
+                    "Длина в метрах недоступна: параметры камеры или направление съёмки не подходят для расчёта.";
+        return SceneDescription.describe(
+                labels, mw, mh, path, projection(shot, width, height), reason);
+    }
+
+    private String frameDescription(Frame f) {
+        return describeScene(
+                        f.labels,
+                        f.mw,
+                        f.mh,
+                        f.shot,
+                        f.bitmap.getWidth(),
+                        f.bitmap.getHeight(),
+                        f.path)
+                .summary;
     }
 
     public static Bitmap renderPath(Bitmap base, FloorPath.Result result) {
@@ -490,7 +533,7 @@ public final class DistanceSupport implements SensorEventListener {
                                 ? "Используется поправка по рулетке; проверьте другие точки."
                                 : "Углы обзора взяты из камеры и пока не проверены.")
                         + "\n"
-                        + f.path.summary();
+                        + frameDescription(f);
         announce(text);
     }
 }

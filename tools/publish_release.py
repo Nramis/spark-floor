@@ -2,6 +2,7 @@
 
 import argparse
 import hashlib
+import json
 from pathlib import Path
 import shutil
 import subprocess
@@ -11,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--gh", default=shutil.which("gh"), help="Path to an authenticated GitHub CLI")
 parser.add_argument("--repo", default="Nramis/spark-floor")
+parser.add_argument("--title", help="Human-readable release title")
 args = parser.parse_args()
 if not args.gh:
     parser.error("Install GitHub CLI, run gh auth login, or provide --gh PATH")
@@ -33,7 +35,6 @@ if head != remote:
     parser.error("Publish and synchronize main before creating its release")
 
 report = ROOT / "verification.json"
-import json
 
 expected = json.loads(report.read_text(encoding="utf-8"))[f"apk_sha256_v{version.replace('.', '')}"]
 digest = hashlib.sha256(apk.read_bytes()).hexdigest()
@@ -54,7 +55,7 @@ subprocess.run(
         "--target",
         head,
         "--title",
-        f"Spark Floor {version} — Voice Assistant",
+        args.title or f"Spark Floor {version}",
         "--notes-file",
         str(notes),
         "--prerelease",

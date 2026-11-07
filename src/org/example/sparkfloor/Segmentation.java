@@ -19,8 +19,19 @@ public final class Segmentation {
     }
 
     public static boolean[] floor(float[][][] logits, int mw, int mh) {
+        return floorMask(labels(logits, mw, mh));
+    }
+
+    public static boolean[] floorMask(int[] labels) {
+        boolean[] floor = new boolean[labels.length];
+        for (int i = 0; i < labels.length; i++) floor[i] = labels[i] == 3;
+        return floor;
+    }
+
+    /** Keep every predicted ADE20K class for scene commentary, not just the floor. */
+    public static int[] labels(float[][][] logits, int mw, int mh) {
         int oh = logits[0].length, ow = logits[0][0].length;
-        boolean[] floor = new boolean[mw * mh];
+        int[] labels = new int[mw * mh];
         for (int y = 0; y < mh; y++)
             for (int x = 0; x < mw; x++) {
                 float sx = Math.max(0, Math.min(ow - 1, (x + .5f) * ow / mw - .5f)),
@@ -41,8 +52,8 @@ public final class Segmentation {
                         label = c;
                     }
                 }
-                floor[y * mw + x] = label == 3;
+                labels[y * mw + x] = label;
             }
-        return floor;
+        return labels;
     }
 }

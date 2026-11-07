@@ -6,7 +6,7 @@
   "java_python_disagreeing_pixels": 2,
   "physical_android_tested": false,
   "distance_measurement_implemented": true,
-  "version": "0.8",
+  "version": "0.9",
   "distance_status": "experimental; numerical tests passed, phone measurements not validated",
   "distance_geometry_tests": "passed: known depth, off-axis, roll, calibration, invalid geometry",
   "path_geometry_tests": "passed: projection roundtrip with roll and focal scale; straight, diagonal, left, right, S; metric arc length; fork, gap, clipped edges, short, empty, remote, missing pose, range refusals",
@@ -26,5 +26,16 @@
   "apk_build_v08": "passed: tools/build_local.py; ARM32 and ARM64; signature v2/v3 and zip alignment verified",
   "apk_sha256_v08": "24fdae19a904430ee3731971a3aa9602bda77e6e7444d234d7c84124da683e07",
   "device_ui_voice_tested_v08": false,
-  "neural_network_changed_v08": false
+  "neural_network_changed_v08": false,
+  "scene_description_tests": "passed: floor commentary without trapezoid, open-floor central span, no-height refusal, semantic object direction, grounded and clipped object base, upper/unrelated objects excluded, unknown gap not named as object, length stops at gap, no floor, preserved semantic classes",
+  "scene_description_policy": "tentative selected ADE20K object classes adjacent to observed floor; frame-relative positions; optional floor-contact distance; no clearance claims",
+  "length_fallback": "continuous observed central floor strip, not total route length; plane geometry and capture pose required",
+  "trapezoid_required": false,
+  "trapezoid_overlay_default": false,
+  "android_compile_v09": "passed: installed JDK and Android SDK 35",
+  "apk_build_v09": "passed: tools/build_local.py; ARM32/ARM64; signatures v2/v3 and alignment verified",
+  "apk_sha256_v09": "27fa7d1290b776f21d07ecf25126aee679fec849bd9b83b8db471beff811b6f1",
+  "device_ui_voice_tested_v09": false,
+  "scene_semantic_accuracy_tested_v09": false,
+  "neural_network_changed_v09": false
 }
