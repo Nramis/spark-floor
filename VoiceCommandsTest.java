@@ -14,6 +14,9 @@ public class VoiceCommandsTest {
         expect("сфотографируй", CAPTURE);
         expect("анализ", CAPTURE);
         expect("Повтори результат.", REPEAT);
+        expect("Подробнее", DETAILS);
+        expect("отчёт о проверке", REPORT);
+        expect("проверь камеру", STATUS);
         expect("помощь", HELP);
         expect("Что ты умеешь?", HELP);
         expect("готовность", STATUS);
@@ -26,6 +29,8 @@ public class VoiceCommandsTest {
         expect("не повторяй", UNKNOWN);
         expect("снимок стоп", UNKNOWN);
         expect("сделай снимок и повтори", UNKNOWN);
+        expect("не отправляй отчет", UNKNOWN);
+        expect("подробнее и снимок", UNKNOWN);
         expect("покажи безопасную дорогу", UNKNOWN);
         expect("снимок 5", UNKNOWN);
         expect(new String(new char[200]).replace('\0', 'а'), UNKNOWN);

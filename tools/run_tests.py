@@ -14,11 +14,18 @@ sources = [
     "src/org/example/sparkfloor/VoiceCommands.java",
     "src/org/example/sparkfloor/Segmentation.java",
     "src/org/example/sparkfloor/SceneDescription.java",
+    "src/org/example/sparkfloor/ImageQuality.java",
+    "src/org/example/sparkfloor/CameraGuidance.java",
+    "src/org/example/sparkfloor/ResultSnapshot.java",
+    "src/org/example/sparkfloor/AssistiveFeedback.java",
     "DistanceTest.java",
     "TrapezoidTest.java",
     "FloorPathTest.java",
     "VoiceCommandsTest.java",
     "SceneDescriptionTest.java",
+    "ImageQualityTest.java",
+    "CameraGuidanceTest.java",
+    "AssistiveFeedbackTest.java",
 ]
 subprocess.run(
     ["javac", "--release", "8", "-encoding", "UTF-8", "-d", str(CLASSES)]
@@ -32,5 +39,8 @@ for test in (
     "FloorPathTest",
     "VoiceCommandsTest",
     "SceneDescriptionTest",
+    "ImageQualityTest",
+    "CameraGuidanceTest",
+    "AssistiveFeedbackTest",
 ):
     subprocess.run(["java", "-cp", str(CLASSES), test], cwd=ROOT, check=True)

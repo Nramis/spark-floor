@@ -28,16 +28,21 @@ public final class SceneDescription {
         public final String summary;
         public final List<ObjectInfo> objects;
         public final double centralLength, centralStart;
+        public final boolean floorDetected, centralGap;
 
         Result(
                 String summary,
                 List<ObjectInfo> objects,
                 double centralLength,
-                double centralStart) {
+                double centralStart,
+                boolean floorDetected,
+                boolean centralGap) {
             this.summary = summary;
             this.objects = Collections.unmodifiableList(new ArrayList<>(objects));
             this.centralLength = centralLength;
             this.centralStart = centralStart;
+            this.floorDetected = floorDetected;
+            this.centralGap = centralGap;
         }
     }
 
@@ -54,6 +59,7 @@ public final class SceneDescription {
         int floorCount = 0;
         for (boolean cell : floor) if (cell) floorCount++;
         boolean hasFloor = floorCount >= Math.max(8, labels.length / 200);
+        boolean gap = hasFloor && centralGap(floor, width, height);
         List<ObjectInfo> objects = findObjects(labels, floor, width, height, camera);
         StringBuilder text =
                 new StringBuilder(
@@ -119,7 +125,7 @@ public final class SceneDescription {
                 text.append("В маске есть резкое изменение или разрыв. ");
         }
         text.append("Оценка по одному снимку; проходимость не подтверждена.");
-        return new Result(text.toString(), objects, length, start);
+        return new Result(text.toString(), objects, length, start, hasFloor, gap);
     }
 
     /** A straight, 0.3 m wide observed strip; does not reconstruct a centreline from cropped edges. */

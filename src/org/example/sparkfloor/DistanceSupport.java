@@ -15,12 +15,14 @@ public final class DistanceSupport implements SensorEventListener {
     public static final class Shot {
         final double h, fxAngle, fyAngle;
         final double[] up;
+        final long capturedAt;
 
         Shot(double a, double x, double y, double[] u) {
             h = a;
             fxAngle = x;
             fyAngle = y;
             up = u;
+            capturedAt = SystemClock.elapsedRealtime();
         }
     }
 
@@ -123,6 +125,10 @@ public final class DistanceSupport implements SensorEventListener {
 
     public String readiness(double fovX, double fovY) {
         Shot shot = capture(fovX, fovY);
+        if (sensor == null)
+            return "Датчик наклона недоступен. Можно описать снимок, но метры не будут определены.";
+        if (CameraGuidance.state(shot.up) != CameraGuidance.State.READY)
+            return CameraGuidance.hint(shot.up);
         if (shot.h <= 0) return "Задайте высоту объектива над полом. Команда: высота.";
         if (shot.up == null)
             return "Держите телефон неподвижно несколько секунд: наклон ещё не готов.";
@@ -147,6 +153,11 @@ public final class DistanceSupport implements SensorEventListener {
                     float height = prefs.getFloat("height", 0);
                     if (height > 0) input.setText(String.valueOf(Math.round(height * 100)));
                     input.setHint("Высота объектива над полом, см");
+                    input.setContentDescription(
+                            "Высота объектива над полом, в сантиметрах. От 40 до 250.");
+                    input.setMinHeight(
+                            Math.round(56 * activity.getResources().getDisplayMetrics().density));
+                    input.setSelectAllOnFocus(true);
                     new AlertDialog.Builder(activity)
                             .setTitle("Высота камеры")
                             .setMessage(
@@ -289,12 +300,28 @@ public final class DistanceSupport implements SensorEventListener {
                     "Для длины в метрах задайте высоту объектива над полом и сделайте новый снимок.";
         else if (shot.up == null)
             reason =
-                    "Длина в метрах недоступна: при съёмке наклон не был устойчивым. Подержите телефон неподвижно и переснимите.";
+                    sensor == null
+                            ? "Для метров нужен датчик наклона; он недоступен."
+                            : "Длина в метрах недоступна: при съёмке наклон не был устойчивым. Подержите телефон неподвижно и переснимите.";
         else
             reason =
                     "Длина в метрах недоступна: параметры камеры или направление съёмки не подходят для расчёта.";
         return SceneDescription.describe(
                 labels, mw, mh, path, projection(shot, width, height), reason);
+    }
+
+    public String metricIssue(Shot shot) {
+        if (shot == null) return "Для встроенного примера метры неизвестны.";
+        if (shot.h < .4 || shot.h > 2.5) return "Для метров задайте высоту камеры и переснимите.";
+        if (shot.up == null && sensor == null) return "Без датчика наклона метры недоступны.";
+        if (shot.up == null) return "Для метров держите телефон неподвижно и переснимите.";
+        if (!Double.isFinite(shot.fxAngle)
+                || !Double.isFinite(shot.fyAngle)
+                || shot.fxAngle < 15
+                || shot.fxAngle > 150
+                || shot.fyAngle < 15
+                || shot.fyAngle > 150) return "Камера не сообщила пригодные параметры для метров.";
+        return null;
     }
 
     private String frameDescription(Frame f) {

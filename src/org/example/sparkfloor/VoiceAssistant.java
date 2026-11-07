@@ -9,12 +9,15 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.media.AudioManager;
+import android.media.ToneGenerator;
 import android.speech.RecognitionListener;
 import android.speech.RecognizerIntent;
 import android.speech.SpeechRecognizer;
 import android.speech.tts.TextToSpeech;
 import android.speech.tts.Voice;
 import android.view.HapticFeedbackConstants;
+import android.view.accessibility.AccessibilityManager;
 import android.widget.Button;
 import android.widget.TextView;
 import java.util.ArrayList;
@@ -30,12 +33,15 @@ public final class VoiceAssistant {
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Button button;
     private final TextView status;
+    private final AccessibilityManager accessibility;
     private TextToSpeech tts;
     private SpeechRecognizer recognizer;
+    private ToneGenerator readyTone;
     private boolean active, destroyed, ready, listening, permissionPending, speechInitialized;
     private boolean systemConsent;
     private int generation;
     private String pendingSpeech;
+    private String pendingPermissionNotice;
     private String voiceProblem = "Загружается русская озвучка…";
     private final Runnable timeout =
             () -> {
@@ -48,15 +54,20 @@ public final class VoiceAssistant {
     public VoiceAssistant(Activity activity, Consumer<VoiceCommands.Command> commands) {
         this.activity = activity;
         this.commands = commands;
+        try {
+            readyTone = new ToneGenerator(AudioManager.STREAM_MUSIC, 60);
+        } catch (RuntimeException ignored) {
+        }
+        accessibility =
+                (AccessibilityManager) activity.getSystemService(Activity.ACCESSIBILITY_SERVICE);
         status = new TextView(activity);
         status.setTextSize(14);
-        status.setMaxLines(2);
-        status.setAccessibilityLiveRegion(android.view.View.ACCESSIBILITY_LIVE_REGION_POLITE);
+        status.setAccessibilityLiveRegion(android.view.View.ACCESSIBILITY_LIVE_REGION_NONE);
         status.setText(voiceProblem);
         button = new Button(activity);
         button.setText("Голосовая команда");
         button.setContentDescription(
-                "Голосовая команда. Одно нажатие — одна команда. Удержание — помощь.");
+                "Голосовая команда. Нажмите для одной команды; повторное нажатие отменяет запись.");
         button.setOnClickListener(v -> requestCommand());
         button.setOnLongClickListener(
                 v -> {
@@ -76,7 +87,13 @@ public final class VoiceAssistant {
     }
 
     public String speechProblem() {
-        return speechInitialized && !ready ? voiceProblem : null;
+        return !usesScreenReader() && speechInitialized && !ready ? voiceProblem : null;
+    }
+
+    public boolean usesScreenReader() {
+        return accessibility != null
+                && accessibility.isEnabled()
+                && accessibility.isTouchExplorationEnabled();
     }
 
     public void showHelp() {
@@ -118,7 +135,10 @@ public final class VoiceAssistant {
                         ? ""
                         : "Нет локального русского голоса. Установите его в настройках синтеза речи Android.";
         if (!listening)
-            status.setText(ready ? "Помощник готов. Нажмите «Голосовая команда»." : voiceProblem);
+            status.setText(
+                    ready || usesScreenReader()
+                            ? "Помощник готов. Нажмите «Голосовая команда»."
+                            : voiceProblem);
         if (active && pendingSpeech != null) {
             String text = pendingSpeech;
             pendingSpeech = null;
@@ -129,6 +149,13 @@ public final class VoiceAssistant {
     public void speak(String text) {
         if (!active || destroyed || text == null || text.isEmpty()) return;
         finishListening();
+        if (usesScreenReader()) {
+            pendingSpeech = null;
+            if (tts != null) tts.stop();
+            status.setText(text);
+            status.announceForAccessibility(text);
+            return;
+        }
         if (!ready) {
             pendingSpeech = text;
             status.setText(voiceProblem);
@@ -142,13 +169,14 @@ public final class VoiceAssistant {
     /** A short assistant response; never replaces the last analysis result. */
     public void tell(String text) {
         speak(text);
-        status.setText(ready ? text : text + "\n" + voiceProblem);
+        status.setText(ready || usesScreenReader() ? text : text + "\n" + voiceProblem);
     }
 
     public void stop() {
         finishListening();
         pendingSpeech = null;
         if (tts != null) tts.stop();
+        if (active && usesScreenReader()) accessibility.interrupt();
         status.setText("Озвучивание остановлено. Микрофон выключен.");
     }
 
@@ -210,10 +238,15 @@ public final class VoiceAssistant {
         permissionPending = false;
         if (!requested || destroyed) return;
         // Explicit tap is required again: a permission dialog can pause the Activity.
-        tell(
+        String notice =
                 granted
                         ? "Микрофон разрешён. Нажмите «Голосовая команда», чтобы сказать команду."
-                        : "Доступ к микрофону не разрешён. Озвучка и кнопки продолжают работать.");
+                        : "Доступ к микрофону не разрешён. Озвучка и кнопки продолжают работать.";
+        if (active) tell(notice);
+        else {
+            pendingPermissionNotice = notice;
+            status.setText(notice);
+        }
     }
 
     private void beginListening() {
@@ -221,6 +254,7 @@ public final class VoiceAssistant {
         finishListening();
         pendingSpeech = null;
         if (tts != null) tts.stop();
+        if (usesScreenReader()) accessibility.interrupt();
         final int session = ++generation;
         try {
             boolean local = onDeviceAvailable();
@@ -240,8 +274,9 @@ public final class VoiceAssistant {
                         @Override
                         public void onReadyForSpeech(Bundle params) {
                             if (!current()) return;
-                            status.setText(
-                                    "Говорите: снимок, повтори, статус, высота, помощь или стоп.");
+                            status.setText("Микрофон готов. Скажите одну команду.");
+                            if (readyTone != null)
+                                readyTone.startTone(ToneGenerator.TONE_PROP_BEEP, 100);
                             button.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
                         }
 
@@ -280,8 +315,7 @@ public final class VoiceAssistant {
                             finishListening();
                             status.setText("Микрофон выключен.");
                             if (command == VoiceCommands.Command.UNKNOWN)
-                                tell(
-                                        "Команда не распознана. Скажите «снимок», «повтори», «статус», «высота», «помощь» или «стоп».");
+                                tell("Команда не распознана. Для списка команд нажмите «Помощь».");
                             else commands.accept(command);
                         }
 
@@ -348,6 +382,14 @@ public final class VoiceAssistant {
     public void resume() {
         active = true;
         if (speechInitialized && !ready) initializeSpeech(TextToSpeech.SUCCESS);
+        handler.post(
+                () -> {
+                    if (active && !destroyed && pendingPermissionNotice != null) {
+                        String notice = pendingPermissionNotice;
+                        pendingPermissionNotice = null;
+                        tell(notice);
+                    }
+                });
     }
 
     public void pause() {
@@ -363,6 +405,10 @@ public final class VoiceAssistant {
         if (tts != null) {
             tts.shutdown();
             tts = null;
+        }
+        if (readyTone != null) {
+            readyTone.release();
+            readyTone = null;
         }
     }
 }
